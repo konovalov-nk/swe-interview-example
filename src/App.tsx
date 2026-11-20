@@ -5,6 +5,7 @@ import { FileTree } from "./components/FileTree";
 import { EditorPane } from "./components/EditorPane";
 import { BottomPanel, type BottomTab } from "./components/BottomPanel";
 import { SessionsDialog } from "./components/SessionsDialog";
+import { SessionAnalytics } from "./components/SessionAnalytics";
 import { VmFrame } from "./components/VmFrame";
 import { FILES, TASK_MARKDOWN, TREE } from "./lib/challenge";
 import { TMUX_COMMAND, provisionEnvironment } from "./lib/provision";
@@ -48,6 +49,7 @@ export default function App() {
   const [savedSession, setSavedSession] = useState<SessionBundle | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionBundle[]>([]);
+  const [analyticsSession, setAnalyticsSession] = useState<SessionBundle | null>(null);
   const recorderRef = useRef<SessionRecorder | null>(null);
   const endedRef = useRef(false);
   const provisioningRef = useRef(false);
@@ -462,8 +464,14 @@ export default function App() {
         sessions={sessions}
         onClose={() => setSessionsOpen(false)}
         onDownload={(session) => void downloadSession(session)}
+        onAnalytics={(session) => setAnalyticsSession(session)}
         onDelete={(id) => void removeSession(id)}
         onDeleteAll={() => void removeAllSessions()}
+      />
+
+      <SessionAnalytics
+        session={analyticsSession}
+        onClose={() => setAnalyticsSession(null)}
       />
 
       <footer className="statusbar">

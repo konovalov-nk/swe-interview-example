@@ -1,4 +1,4 @@
-import { Download, History, Trash2, X } from "lucide-react";
+import { BarChart3, Download, History, Trash2, X } from "lucide-react";
 import { formatDuration } from "../lib/telemetry/analyze";
 import type { SessionBundle } from "../lib/telemetry/types";
 
@@ -7,6 +7,7 @@ type Props = {
   sessions: SessionBundle[];
   onClose: () => void;
   onDownload: (session: SessionBundle) => void;
+  onAnalytics: (session: SessionBundle) => void;
   onDelete: (id: string) => void;
   onDeleteAll: () => void;
 };
@@ -28,6 +29,7 @@ export function SessionsDialog({
   sessions,
   onClose,
   onDownload,
+  onAnalytics,
   onDelete,
   onDeleteAll,
 }: Props) {
@@ -66,6 +68,9 @@ export function SessionsDialog({
                 <div className="session-actions">
                   <button className="btn small" onClick={() => onDownload(session)}>
                     <Download size={12} /> Download
+                  </button>
+                  <button className="btn small" onClick={() => onAnalytics(session)}>
+                    <BarChart3 size={12} /> Analytics
                   </button>
                   <button className="btn small ghost" onClick={() => onDelete(session.id)}>
                     <Trash2 size={12} /> Delete

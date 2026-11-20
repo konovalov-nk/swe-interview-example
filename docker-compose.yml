@@ -5,8 +5,10 @@ services:
     container_name: swe-interview-example
     restart: unless-stopped
     labels:
-      caddy: https://swe-interview-example.br11k.dev
-      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy_0: https://swe-interview.br11k.dev
+      caddy_0.reverse_proxy: "{{upstreams 80}}"
+      caddy_1: https://swe-interview-example.br11k.dev
+      caddy_1.reverse_proxy: "{{upstreams 80}}"
     networks:
       - proxy
 
