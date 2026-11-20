@@ -144,7 +144,7 @@ PROXY=~/git/konovalov-nk/caddy-proxy-network
 # 1. orange cloud on the DNS record (Full (strict) SSL is assumed)
 "$PROXY/scripts/cf-edge" proxy on swe-interview-example.br11k.dev
 
-# 2. cache rules: /overlays/* and /vm/* except /vm/index.html,
+# 2. cache rules: /overlays/* and /vm/* except /vm/ and /vm/index.html,
 #    /assets/*; HTML is bypassed
 "$PROXY/scripts/cf-edge" cache setup-swe-interview
 
