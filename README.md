@@ -130,6 +130,38 @@ label and gets the certificate. The public edge also needs a route (DNS for
 `--apply-edge` updates HAProxy on Hetzner with a timestamped backup and
 restarts only `haproxy-edge`. The verify step waits for Caddy ACME.
 
+## Cloudflare proxy / cache
+
+The VM image and the 45 MB overlay are baked into the Docker image and served
+by nginx on ArchVM. The Hetzner edge is a TCP/SNI passthrough, not a cache, so
+without Cloudflare every new browser downloads the overlay through the home
+uplink. Put Cloudflare in front with the helper from
+`~/git/konovalov-nk/caddy-proxy-network`:
+
+```sh
+PROXY=~/git/konovalov-nk/caddy-proxy-network
+
+# 1. orange cloud on the DNS record (Full (strict) SSL is assumed)
+"$PROXY/scripts/cf-edge" proxy on swe-interview-example.br11k.dev
+
+# 2. cache rules: /overlays/* and /vm/* except /vm/index.html,
+#    /assets/*; HTML is bypassed
+"$PROXY/scripts/cf-edge" cache setup-swe-interview
+
+# 3. optional: SSL strict, Rocket Loader off, Auto Minify off, ...
+"$PROXY/scripts/cf-edge" zone-settings
+```
+
+`cache list`, `cache add`, `cache delete --id/--desc`, and
+`proxy on|off|status` are available too; see the proxy repo README. The
+Cloudflare token needs `Zone → DNS → Edit`, `Zone → Cache Rules → Edit`, and
+(for zone-settings) `Zone → Zone Settings → Edit`.
+
+First overlay request in each Cloudflare PoP is a cache miss (~13 GB total
+across PoPs); after that the 45 MB comes from Cloudflare, not from home/Hetzner.
+For a completely origin-free overlay, put `swe-base.data.gz` in R2 and point
+the app at the R2 URL (R2 egress through Cloudflare is free).
+
 ### Why not GitHub Pages?
 
 GitHub Pages cannot set `Cross-Origin-Opener-Policy` /
