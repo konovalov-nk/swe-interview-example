@@ -52,10 +52,11 @@ of ext4 blocks dirty. `scripts/build-overlay.mjs`:
 5. `lotPush` uploads the meta + raw dirty extents to the local build server;
 6. gzips the extents to `public/overlays/swe-base.data.gz`.
 
-At runtime `src/lib/vm.ts` fetches the meta + gz, decompresses, and puts the
-record into IndexedDB `lot-images` **before** creating the iframe. The VM boots
-with `?image=@swe-base` and applies the overlay. The record is cached per
-browser, so subsequent loads only fetch the small base assets.
+At runtime the iframe’s patched `lotPull` fetches `/overlays/swe-base.json` +
+`.data.gz` from our own origin, inflates the gzip when the host did not already
+do it (`Content-Encoding: gzip` vs a raw `.gz`), and applies the extents before
+booting `?image=@swe-base`. The VM never writes the 150 MB record to
+IndexedDB; the HTTP cache (`immutable` in nginx) is the cache.
 
 The overlay is bound to the `sha256` in
 `public/vm/linux-dist/rootfs-lean.manifest.json`. Do not replace the base
@@ -81,6 +82,13 @@ The agent is started with `/usr/local/bin/python3 -S` so the challenge’s broke
 `sitecustomize.py` cannot take the editor bridge down. The **candidate’s**
 commands still go through the broken CI runner and hit the planted bugs.
 
+The wasm32 CPython has no `os.fork`/`subprocess`. `exec`/`spawn` therefore
+write one line to `/tmp/lot-cmd`; `vm/lot-runner.sh` (a shell loop started at
+boot) runs it and leaves `/tmp/lot-out`, `/tmp/lot-exit`, `/tmp/lot-done`; the
+agent returns those. On boot the page also replaces the older agent baked into
+the golden overlay with the current one and starts the runner, so the golden
+image can stay pinned.
+
 ## Provisioning
 
 `src/lib/provision.ts` writes the workspace and the five breakages after the
@@ -92,8 +100,8 @@ agent answers:
 4. `sitecustomize.py` → non-blocking `socket.connect`;
 5. `/opt/rogue.py` → listener on `127.0.0.1:18080`.
 
-The reset button reboots the iframe, re-seeds the overlay from IndexedDB, and
-re-runs provisioning with the candidate’s current `solution.py` preserved.
+The reset button reboots the iframe (the overlay comes from the HTTP cache),
+and re-runs provisioning with the candidate’s current `solution.py` preserved.
 
 ## Security and limits
 

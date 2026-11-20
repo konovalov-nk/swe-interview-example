@@ -153,6 +153,10 @@ The test suite checks IPv4/IPv6, empty input, duplicate collapse, order,
 invalid addresses/ports, per-host timeout, concurrency, socket cleanup,
 global-timeout hygiene, and thread safety.
 
+Note: the wasm32 guest kernel has no IPv6 loopback (`::1`), so the three IPv6
+tests self-skip there (`IPv6 loopback unavailable`). Run the final hidden
+grader on a normal Linux host to exercise them.
+
 ## Grading
 
 Suggested weights:

@@ -70,9 +70,9 @@ export function startVmServer({ root = process.cwd(), port = 8130 } = {}) {
 
     let base = null;
     let rel = '';
-    if (url.pathname === '/lot-agent.py') {
+    if (url.pathname === '/lot-agent.py' || url.pathname === '/lot-runner.sh') {
       base = path.join(root, 'vm');
-      rel = 'lot-agent.py';
+      rel = url.pathname.slice(1);
     } else if (url.pathname.startsWith('/vm/')) {
       base = vmDir;
       rel = url.pathname.slice('/vm/'.length);

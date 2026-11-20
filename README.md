@@ -1,5 +1,9 @@
 # Two Files — browser debugging interview
 
+> **Demo/interviewer repository.** The candidate-facing page only renders
+> `challenge/senior/README.md`; `docs/interviewer.md` is the answer key. Keep
+> this repository private for real interviews.
+
 ![Interview UI](docs/screenshot.png)
 
 A self-contained, local-first interview environment:
@@ -59,16 +63,19 @@ LinuxOnTab WASM Linux  ──  /root/work/{solution.py, tests/, run_tests.sh}
 ```
 
 - The overlay is a committed ext4 dirty-block image (`public/overlays/`). The
-  app seeds it into IndexedDB under `lot-images` and boots
-  `?image=@swe-base`.
+  iframe's patched `lotPull` fetches the meta + `.data.gz` from our own
+  `/overlays/`, inflates it, and boots `?image=@swe-base`. The browser HTTP
+  cache is the cache; there is no 150 MB IndexedDB write.
 - The iframe is same-origin and inherits cross-origin isolation from the top
   page. Both the app and the VM are served with COOP/COEP.
 - The guest agent listens on port 45999. The page connects to it through the
   in-page slirp, so editor saves and “Run tests” do not have to type into the
-  terminal.
+  terminal. The wasm32 Python has no `fork`/`subprocess`, so commands go
+  through a FIFO to `vm/lot-runner.sh`; the agent waits for the runner’s result
+  files.
 - The five breakages are applied by `src/lib/provision.ts` after boot: a broken
   CI interpreter, a runner pointed at the old smoke tests, a stale test-local
-  `solution.py` symlink, a `sitecustomize` socket hook, and a rogue listener on
+  `solution.py` copy, a `sitecustomize` socket hook, and a rogue listener on
   the “down” port.
 
 More detail: [`docs/architecture.md`](docs/architecture.md).

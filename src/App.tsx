@@ -79,6 +79,7 @@ export default function App() {
       await nextAgent.restartAgentAndRunner(agentSource, runnerSource);
       onPhase("provisioning", "Writing the workspace…");
       await provisionEnvironment(nextAgent, { keepSolution: keep });
+      nextAgent.clearTerminal();
       const clean: Record<string, string> = { ...INITIAL_FILES, "solution.py": keep };
       filesRef.current = clean;
       setFiles(clean);

@@ -101,6 +101,16 @@ export class GuestAgent {
     return r;
   }
 
+  clearTerminal(): void {
+    try {
+      const win = this.frame.contentWindow as any;
+      win.__term?.clear?.();
+      win.guestSend?.("");
+    } catch {
+      /* cosmetic */
+    }
+  }
+
   async killPidFile(path: string): Promise<void> {
     const r = await this.call<{ ok: boolean; error?: string }>({ op: "kill", path }, 5_000);
     if (!r.ok) throw new Error(r.error || `kill failed: ${path}`);
@@ -201,128 +211,8 @@ export async function waitForAgent(
 /* Overlay seeding                                                     */
 /* ------------------------------------------------------------------ */
 
-const IMG_DB = "lot-images";
-const IMG_STORE = "images";
-
-function openImageDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IMG_DB, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(IMG_STORE)) {
-        db.createObjectStore(IMG_STORE, { keyPath: "name" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function idbGet<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IMG_STORE, "readonly");
-    const req = tx.objectStore(IMG_STORE).get(key);
-    req.onsuccess = () => resolve(req.result as T | undefined);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function idbPut(db: IDBDatabase, value: unknown): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IMG_STORE, "readwrite");
-    tx.objectStore(IMG_STORE).put(value);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export type OverlayMeta = {
-  name: string;
-  baseSha: string;
-  extents: [number, number][];
-  created: number;
-  dataSize: number;
-};
-
 export const OVERLAY_NAME = "swe-base";
 export const OVERLAY_META_URL = "/overlays/swe-base.json";
-export const OVERLAY_DATA_URL = "/overlays/swe-base.data.gz";
-
-async function fetchWithProgress(
-  url: string,
-  onProgress?: (received: number, total: number | null) => void,
-): Promise<ArrayBuffer> {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  const total = Number(res.headers.get("content-length")) || null;
-  if (!res.body) return res.arrayBuffer();
-
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      received += value.byteLength;
-      onProgress?.(received, total);
-    }
-  }
-  const out = new Uint8Array(received);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.byteLength;
-  }
-  return out.buffer;
-}
-
-async function gunzip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
-  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Response(stream).arrayBuffer();
-}
-
-/**
- * Put the committed rootfs overlay into the iframe's IndexedDB before the VM
- * boots.  The VM's own `?image=@swe-base` path reads exactly this record, so
- * we don't need a relay or an API server.
- */
-export async function ensureOverlay(
-  onProgress?: (phase: string, received: number, total: number | null) => void,
-): Promise<void> {
-  const metaRes = await fetch(OVERLAY_META_URL, { cache: "no-store" });
-  const metaType = metaRes.headers.get("content-type") || "";
-  if (!metaRes.ok || !metaType.includes("json")) {
-    throw new Error(
-      "Environment image is missing. Build it with `npm run build:overlay` (see README).",
-    );
-  }
-  const meta = (await metaRes.json()) as OverlayMeta;
-  const db = await openImageDb();
-  try {
-    const existing = await idbGet<{ baseSha: string }>(db, OVERLAY_NAME);
-    if (existing?.baseSha === meta.baseSha) {
-      onProgress?.("cached", 1, 1);
-      return;
-    }
-    const gz = await fetchWithProgress(OVERLAY_DATA_URL, (received, total) =>
-      onProgress?.("download", received, total),
-    );
-    onProgress?.("unpack", 0, null);
-    const raw = await gunzip(gz);
-    await idbPut(db, {
-      name: OVERLAY_NAME,
-      baseSha: meta.baseSha,
-      extents: meta.extents,
-      data: raw,
-      created: meta.created,
-    });
-    onProgress?.("ready", 1, 1);
-  } finally {
-    db.close();
-  }
-}
 
 export function buildVmUrl(): string {
   const cmd =
