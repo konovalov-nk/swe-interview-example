@@ -8,6 +8,7 @@ import {
 
 type Props = {
   agentReady: boolean;
+  canRun: boolean;
   phase: string;
   running: boolean;
   taskOpen: boolean;
@@ -19,6 +20,7 @@ type Props = {
 
 export function TopBar({
   agentReady,
+  canRun,
   phase,
   running,
   taskOpen,
@@ -62,7 +64,7 @@ export function TopBar({
       <button className="icon-btn" onClick={onReset} disabled={!agentReady} title="Reset environment">
         <RotateCcw size={15} />
       </button>
-      <button className="btn primary small" onClick={onRun} disabled={!agentReady || running}>
+      <button className="btn primary small" onClick={onRun} disabled={!canRun || running}>
         <Play size={13} /> {running ? "Running" : "Run"}
       </button>
     </header>

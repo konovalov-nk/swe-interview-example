@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { TaskPanel } from "./components/TaskPanel";
 import { FileTree } from "./components/FileTree";
@@ -10,9 +10,13 @@ import { TMUX_COMMAND, provisionEnvironment } from "./lib/provision";
 import { agentSource, runnerSource } from "./lib/agentSources";
 import { parseUnittest, type TestRun } from "./lib/tests";
 import type { GuestAgent } from "./lib/vm";
+import { SessionRecorder } from "./lib/telemetry/recorder";
+import { saveSession } from "./lib/telemetry/store";
+import type { SessionBundle } from "./lib/telemetry/types";
 import "./App.css";
 
 const INITIAL_FILES = Object.fromEntries(FILES.map((f) => [f.path, f.content]));
+const TASK = { id: "healthcheck", version: "senior@1", title: "Healthcheck service" };
 
 export default function App() {
   const [files, setFiles] = useState<Record<string, string>>(INITIAL_FILES);
@@ -37,6 +41,12 @@ export default function App() {
   const [sessionKey, setSessionKey] = useState(0);
   const [remaining, setRemaining] = useState(60 * 60);
   const [started, setStarted] = useState(false);
+  const [attemptEnded, setAttemptEnded] = useState(false);
+  const [recordOptIn, setRecordOptIn] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [savedSession, setSavedSession] = useState<SessionBundle | null>(null);
+  const recorderRef = useRef<SessionRecorder | null>(null);
+  const endedRef = useRef(false);
   const provisioningRef = useRef(false);
   const readySessionRef = useRef<number | null>(null);
   const pendingSolutionRef = useRef<string | null>(null);
@@ -46,6 +56,13 @@ export default function App() {
   activePathRef.current = activePath;
   dirtyRef.current = dirty;
   agentRef.current = agent;
+
+  const isClean = useMemo(
+    () =>
+      Object.keys(INITIAL_FILES).every((path) => (files[path] ?? "") === INITIAL_FILES[path]) &&
+      Object.keys(files).length === Object.keys(INITIAL_FILES).length,
+    [files],
+  );
 
   useEffect(() => {
     if (!started || pagePhase !== "ready") return;
@@ -88,7 +105,7 @@ export default function App() {
       pendingSolutionRef.current = null;
       readySessionRef.current = sessionKey;
       onPhase("ready");
-      setStarted(true);
+      recorderRef.current?.event("vm.ready", {});
     } catch (err) {
       onPhase("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -103,6 +120,7 @@ export default function App() {
     if (content == null) return;
     try {
       await currentAgent.writeText(`/root/work/${path}`, content);
+      recorderRef.current?.event("editor.save", { path, length: content.length });
       setDirty((prev) => {
         if (!prev.has(path)) return prev;
         const next = new Set(prev);
@@ -141,6 +159,7 @@ export default function App() {
       if (dirtyRef.current.has(activePathRef.current)) {
         void saveFile(activePathRef.current);
       }
+      recorderRef.current?.event("file.open", { path });
       setActivePath(path);
       activePathRef.current = path;
       setOpenTabs((tabs) => (tabs.includes(path) ? tabs : [...tabs, path]));
@@ -174,6 +193,8 @@ export default function App() {
     setRunning(true);
     setBottomTab("tests");
     setOutput("");
+    const recorder = recorderRef.current;
+    recorder?.beginRun("cd /root/work && ./run_tests.sh", filesRef.current);
     try {
       const result = await currentAgent.exec("cd /root/work && ./run_tests.sh", {
         cwd: "/root/work",
@@ -186,17 +207,76 @@ export default function App() {
       });
       setOutput(`${raw}\n\n[exit ${result.exit ?? "?"} · ${result.duration_ms} ms]`);
       setTestRun(parsed);
+      recorder?.endRun({
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exit: result.exit,
+        durationMs: result.duration_ms,
+        ok: parsed.ok,
+        counts: {
+          ran: parsed.ran,
+          passed: parsed.passed,
+          failed: parsed.failed,
+          errors: parsed.errors,
+          skipped: parsed.skipped,
+        },
+      });
     } catch (err) {
-      setOutput(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setOutput(message);
       setTestRun(null);
+      recorder?.endRun({
+        stderr: message,
+        exit: null,
+        durationMs: 0,
+        ok: false,
+        counts: { ran: null, passed: 0, failed: 0, errors: 1, skipped: 0 },
+      });
     } finally {
       runningRef.current = false;
       setRunning(false);
     }
   }, [saveFile]);
 
+  const finishAttempt = useCallback(
+    async (reason: "manual" | "timeout" | "reset") => {
+      if (!started || endedRef.current) return;
+      endedRef.current = true;
+      setStarted(false);
+      setAttemptEnded(true);
+      setRecording(false);
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      if (!recorder) return;
+      const bundle = recorder.finish(filesRef.current, reason);
+      setSavedSession(bundle);
+      await saveSession(bundle);
+    },
+    [started],
+  );
+
+  useEffect(() => {
+    if (started && !attemptEnded && remaining <= 0) void finishAttempt("timeout");
+  }, [started, attemptEnded, remaining, finishAttempt]);
+
+  const startAttempt = useCallback(() => {
+    if (started || pagePhase !== "ready" || !agentRef.current) return;
+    if (recordOptIn && isClean) {
+      const recorder = new SessionRecorder(TASK);
+      recorder.start();
+      recorder.event("vm.ready", {});
+      recorderRef.current = recorder;
+      setRecording(true);
+    }
+    endedRef.current = false;
+    setAttemptEnded(false);
+    setSavedSession(null);
+    setStarted(true);
+  }, [started, pagePhase, recordOptIn, isClean]);
+
   const resetEnvironment = useCallback(() => {
     if (!agentRef.current) return;
+    recorderRef.current?.event("vm.reset", {});
     pendingSolutionRef.current = filesRef.current["solution.py"] ?? "";
     readySessionRef.current = null;
     setAgent(null);
@@ -274,11 +354,13 @@ export default function App() {
       onPhase={onPhase}
     />
   );
+  const canRun = agent != null && pagePhase === "ready" && started && !attemptEnded;
 
   return (
     <div className="app">
       <TopBar
         agentReady={agent != null && pagePhase === "ready"}
+        canRun={canRun}
         phase={pagePhase}
         running={running}
         taskOpen={taskOpen}
@@ -304,12 +386,24 @@ export default function App() {
             testRun={testRun}
             running={running}
             agentReady={agent != null && pagePhase === "ready"}
+            canRun={canRun}
             phase={pagePhase}
             remaining={remaining}
             onRun={runTests}
             onReset={resetEnvironment}
             onTmux={openTmux}
             onDownload={downloadSubmission}
+            session={{
+              started,
+              ended: attemptEnded,
+              optIn: recordOptIn,
+              clean: isClean,
+              recording,
+              saved: savedSession != null,
+              onOptIn: setRecordOptIn,
+              onStart: startAttempt,
+              onEnd: () => void finishAttempt("manual"),
+            }}
           />
         ) : null}
 
