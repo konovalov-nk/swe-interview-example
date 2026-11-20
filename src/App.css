@@ -1096,3 +1096,14 @@
     display: none;
   }
 }
+
+.record-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border-soft); color: var(--muted); font-size: 12px; }
+.record-row.on { color: var(--red); }
+.record-opt { display: flex; align-items: flex-start; gap: 7px; color: var(--fg); line-height: 1.35; cursor: pointer; }
+.record-opt input { margin: 2px 0 0; accent-color: var(--blue-bright); }
+.record-help { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); font-size: 11px; cursor: help; }
+.record-note { padding: 0 14px 8px; color: var(--muted); font-size: 11px; }
+.record-note.warn { color: var(--yellow); }
+.record-locked { display: inline-flex; align-items: center; gap: 4px; }
+.record-state { color: var(--fg); font-weight: 600; }
+.record-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 3px rgba(248, 113, 113, .15); }

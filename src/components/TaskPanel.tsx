@@ -5,8 +5,11 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  Info,
+  Lock,
   Play,
   RotateCcw,
+  Square,
   SquareTerminal,
   XCircle,
 } from "lucide-react";
@@ -17,12 +20,24 @@ type Props = {
   testRun: TestRun | null;
   running: boolean;
   agentReady: boolean;
+  canRun: boolean;
   phase: string;
   remaining: number;
   onRun: () => void;
   onReset: () => void;
   onTmux: () => void;
   onDownload: () => void;
+  session: {
+    started: boolean;
+    ended: boolean;
+    optIn: boolean;
+    clean: boolean;
+    recording: boolean;
+    saved: boolean;
+    onOptIn: (value: boolean) => void;
+    onStart: () => void;
+    onEnd: () => void;
+  };
 };
 
 function fmt(seconds: number): string {
@@ -36,12 +51,14 @@ export function TaskPanel({
   testRun,
   running,
   agentReady,
+  canRun,
   phase,
   remaining,
   onRun,
   onReset,
   onTmux,
   onDownload,
+  session,
 }: Props) {
   const summary = testRun
     ? testRun.ran == null
@@ -68,8 +85,64 @@ export function TaskPanel({
         </span>
       </div>
 
+      <div className={`record-row ${session.recording ? "on" : ""}`}>
+        {session.ended ? (
+          <span className="record-note">
+            Attempt ended{session.saved ? " · session saved locally" : " · not recorded"}
+          </span>
+        ) : session.started ? (
+          <>
+            <span className="record-dot" />
+            <span className="record-state">{session.recording ? "Recording" : "Not recorded"}</span>
+            <span className="record-locked">
+              <Lock size={11} /> Tracking is locked during attempt
+            </span>
+            <span
+              className="record-help"
+              title="The app records the full attempt from the start. A complete timeline is necessary for analysis."
+            >
+              ?
+            </span>
+          </>
+        ) : (
+          <>
+            <label
+              className="record-opt"
+              title="The app saves events and test logs in this browser. Nothing is sent to a server."
+            >
+              <input
+                type="checkbox"
+                checked={session.optIn}
+                disabled={!session.clean}
+                onChange={(event) => session.onOptIn(event.target.checked)}
+              />
+              <span>Record session for analytics (local-only, opt-in to share)?</span>
+            </label>
+            <span
+              className="record-help"
+              title="The app saves file opens, saves, test runs, and output in this browser. It does not upload data."
+            >
+              <Info size={12} />
+            </span>
+          </>
+        )}
+      </div>
+      {!session.started && !session.ended && !session.clean ? (
+        <div className="record-note warn">Reload to start from a clean workspace.</div>
+      ) : null}
+
       <div className="task-actions">
-        <button className="btn primary" onClick={onRun} disabled={!agentReady || running}>
+        {!session.started && !session.ended ? (
+          <button className="btn primary" onClick={session.onStart} disabled={!agentReady}>
+            <Play size={14} /> Start attempt
+          </button>
+        ) : null}
+        {session.started ? (
+          <button className="btn" onClick={session.onEnd} title="End the attempt and save the session">
+            <Square size={13} /> End
+          </button>
+        ) : null}
+        <button className="btn primary" onClick={onRun} disabled={!canRun || running}>
           <Play size={14} /> {running ? "Running…" : "Run tests"}
         </button>
         <button className="btn" onClick={onTmux} disabled={!agentReady} title="Open tmux: shell, nano, python">
