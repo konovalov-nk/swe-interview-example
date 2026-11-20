@@ -1,4 +1,5 @@
 import {
+  History,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
@@ -16,6 +17,7 @@ type Props = {
   onRun: () => void;
   onReset: () => void;
   onTmux: () => void;
+  onSessions: () => void;
 };
 
 export function TopBar({
@@ -28,6 +30,7 @@ export function TopBar({
   onRun,
   onReset,
   onTmux,
+  onSessions,
 }: Props) {
   const statusLabel =
     phase === "ready"
@@ -57,6 +60,9 @@ export function TopBar({
 
       <button className="icon-btn" onClick={onToggleTask} title="Toggle task panel">
         {taskOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+      </button>
+      <button className="icon-btn" onClick={onSessions} title="Saved sessions">
+        <History size={15} />
       </button>
       <button className="icon-btn" onClick={onTmux} disabled={!agentReady} title="Open tmux workspace">
         <SquareTerminal size={15} />
