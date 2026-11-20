@@ -37,6 +37,7 @@ type Props = {
     onOptIn: (value: boolean) => void;
     onStart: () => void;
     onEnd: () => void;
+    onDownload: () => void;
   };
 };
 
@@ -140,6 +141,11 @@ export function TaskPanel({
         {session.started ? (
           <button className="btn" onClick={session.onEnd} title="End the attempt and save the session">
             <Square size={13} /> End
+          </button>
+        ) : null}
+        {session.saved ? (
+          <button className="btn" onClick={session.onDownload} title="Download the session archive">
+            <Download size={14} /> Session
           </button>
         ) : null}
         <button className="btn primary" onClick={onRun} disabled={!canRun || running}>

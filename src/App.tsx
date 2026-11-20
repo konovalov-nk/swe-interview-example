@@ -4,6 +4,7 @@ import { TaskPanel } from "./components/TaskPanel";
 import { FileTree } from "./components/FileTree";
 import { EditorPane } from "./components/EditorPane";
 import { BottomPanel, type BottomTab } from "./components/BottomPanel";
+import { SessionsDialog } from "./components/SessionsDialog";
 import { VmFrame } from "./components/VmFrame";
 import { FILES, TASK_MARKDOWN, TREE } from "./lib/challenge";
 import { TMUX_COMMAND, provisionEnvironment } from "./lib/provision";
@@ -11,7 +12,7 @@ import { agentSource, runnerSource } from "./lib/agentSources";
 import { parseUnittest, type TestRun } from "./lib/tests";
 import type { GuestAgent } from "./lib/vm";
 import { SessionRecorder } from "./lib/telemetry/recorder";
-import { saveSession } from "./lib/telemetry/store";
+import { deleteAllSessions, deleteSession, downloadSession, listSessions, saveSession } from "./lib/telemetry/store";
 import type { SessionBundle } from "./lib/telemetry/types";
 import "./App.css";
 
@@ -45,6 +46,8 @@ export default function App() {
   const [recordOptIn, setRecordOptIn] = useState(false);
   const [recording, setRecording] = useState(false);
   const [savedSession, setSavedSession] = useState<SessionBundle | null>(null);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessions, setSessions] = useState<SessionBundle[]>([]);
   const recorderRef = useRef<SessionRecorder | null>(null);
   const endedRef = useRef(false);
   const provisioningRef = useRef(false);
@@ -274,6 +277,22 @@ export default function App() {
     setStarted(true);
   }, [started, pagePhase, recordOptIn, isClean]);
 
+  const openSessions = useCallback(async () => {
+    setSessions(await listSessions());
+    setSessionsOpen(true);
+  }, []);
+
+  const removeSession = useCallback(async (id: string) => {
+    await deleteSession(id);
+    setSessions(await listSessions());
+  }, []);
+
+  const removeAllSessions = useCallback(async () => {
+    await deleteAllSessions();
+    setSessions([]);
+    setSavedSession(null);
+  }, []);
+
   const resetEnvironment = useCallback(() => {
     if (!agentRef.current) return;
     recorderRef.current?.event("vm.reset", {});
@@ -368,6 +387,7 @@ export default function App() {
         onRun={runTests}
         onReset={resetEnvironment}
         onTmux={openTmux}
+        onSessions={openSessions}
       />
 
       {pagePhase === "error" ? (
@@ -403,6 +423,7 @@ export default function App() {
               onOptIn: setRecordOptIn,
               onStart: startAttempt,
               onEnd: () => void finishAttempt("manual"),
+              onDownload: () => savedSession && void downloadSession(savedSession),
             }}
           />
         ) : null}
@@ -435,6 +456,15 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      <SessionsDialog
+        open={sessionsOpen}
+        sessions={sessions}
+        onClose={() => setSessionsOpen(false)}
+        onDownload={(session) => void downloadSession(session)}
+        onDelete={(id) => void removeSession(id)}
+        onDeleteAll={() => void removeAllSessions()}
+      />
 
       <footer className="statusbar">
         <span className="status-remote">LinuxOnTab WASM</span>
