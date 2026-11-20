@@ -4,7 +4,14 @@ import zlib from "node:zlib";
 
 const base = process.env.BASE_URL || "https://swe-interview.br11k.dev";
 const out = process.env.ARCHIVE_OUT || "/tmp/swe-session-e2e.json.gz";
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
+const args = process.env.RESOLVE_IP
+  ? [`--host-resolver-rules=MAP ${new URL(base).hostname} ${process.env.RESOLVE_IP}`]
+  : [];
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.CHROME_PATH || undefined,
+  args,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.setDefaultTimeout(5000);
 
