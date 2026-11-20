@@ -1,0 +1,73 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --panel: #111418;
+  --panel-2: #181818;
+  --editor: #1e1e1e;
+  --border: #2b2b2b;
+  --border-soft: #252526;
+  --fg: #d4d4d4;
+  --muted: #8a8a8a;
+  --blue: #0e639c;
+  --blue-bright: #1177bb;
+  --green: #4ade80;
+  --red: #f87171;
+  --yellow: #e2c08d;
+  --mono: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, Helvetica,
+    Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+}
+
+a {
+  color: #4daafc;
+}
+
+::selection {
+  background: #264f78;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b3b3b;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+  background-clip: padding-box;
+}

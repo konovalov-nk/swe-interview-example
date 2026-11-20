@@ -1,0 +1,148 @@
+// sw-guest-proxy.js — reverse proxy that renders GUEST web apps in the page.
+//
+// The web-view panel points an iframe at  <base>/guest/<port>/ . This worker
+// intercepts every request under that prefix (and every absolute-path request
+// *referred* by a guest-framed document — Flask templates link site-absolute
+// URLs like /static/x.css) and forwards it to the shell page over a one-shot
+// MessageChannel. The page speaks HTTP/1.1 over an injected TCP connection
+// straight into the wasm guest (same primitive as the VNC view / wf-live
+// bridge) and replies with status + headers + body.
+//
+// Stateless by design: no handshake, no global map — each fetch event finds
+// the shell client and carries its own reply port, so the browser can kill
+// and restart this worker at any time with zero consequences.
+//
+// Everything that is NOT guest traffic gets no respondWith() at all: the
+// browser's default network path stays untouched (the 512 MB rootfs download
+// never flows through here).
+
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+// 'whoami': a shell page asks for its client id (to put into its frame path).
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'whoami' && e.ports && e.ports[0]) {
+    e.ports[0].postMessage({ id: e.source && e.source.id });
+  }
+});
+
+// Matches both deploy layouts: /guest/8080/... (Pages, page at /) and
+// /shell/guest/8080/... (local serve.sh, page at /shell/wasm.html).
+// /guest/<port>/... or /guest/<shellClientId>/<port>/...: the shell page embeds
+// its own SW client id (learned via a 'whoami' message) so the worker delivers
+// its frame's requests to THAT page. Without the id, requests went to the
+// focused/visible shell — with the console page and several container tabs
+// open, a web view was routed to some other tab's guest and got "no response
+// from guest :8080" for a server that was up.
+const GUEST_RE = /^(.*\/guest\/(?:([A-Za-z0-9-]{8,})\/)?(\d{2,5}))(\/.*)?$/;
+
+function textResponse(status, msg) {
+  return new Response(msg + '\n', {
+    status,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'cross-origin-embedder-policy': 'require-corp',
+      'cross-origin-resource-policy': 'same-origin',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
+async function findShell(shellId) {
+  if (shellId) {
+    try { const c = await self.clients.get(shellId); if (c) return c; } catch (_) {}
+  }
+  const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const shells = cs.filter((c) => !GUEST_RE.test(new URL(c.url).pathname));
+  shells.sort((a, b) =>
+    (b.focused - a.focused) ||
+    ((b.visibilityState === 'visible') - (a.visibilityState === 'visible')));
+  return shells[0] || null;
+}
+
+// Content-hashed build assets (Vite's name-XXXXXXXX.js/.css) never change
+// for a given name, so cache them in CacheStorage: a repeat launch of the
+// same demo skips the slow serialized guest link entirely (~850 KB for the
+// Spiel UI), and a retry after a failed load only re-fetches what's missing.
+// index.html and /api/* are never cached.
+const ASSET_RE = /\/assets\/[^/?]+-[A-Za-z0-9_-]{8}\.(?:js|css|woff2?|ttf|png|svg|webp)(?:\?.*)?$/;
+const ASSET_CACHE = 'guest-assets-v1';
+async function proxyCached(request, port, pathq, prefix, shellId) {
+  const cacheable = request.method === 'GET' && !request.headers.has('range') && ASSET_RE.test(pathq);
+  if (!cacheable) return proxy(request, port, pathq, prefix, shellId);
+  const key = new Request(self.location.origin + '/__guest_asset' + pathq.split('?')[0]);
+  let cache = null;
+  try {
+    cache = await caches.open(ASSET_CACHE);
+    const hit = await cache.match(key);
+    if (hit) return hit;
+  } catch (_) { /* no CacheStorage (private mode) — fall through */ }
+  const resp = await proxy(request, port, pathq, prefix, shellId);
+  if (cache && resp.status === 200) { try { await cache.put(key, resp.clone()); } catch (_) {} }
+  return resp;
+}
+
+async function proxy(request, port, pathq, prefix, shellId) {
+  const shell = await findShell(shellId);
+  if (!shell) return textResponse(502, 'guest proxy: shell page not found — keep the LinuxOnTab tab open.');
+  const body = (request.method === 'GET' || request.method === 'HEAD')
+    ? null
+    : await request.arrayBuffer();
+  const headers = {};
+  for (const [k, v] of request.headers) headers[k] = v;
+
+  const reply = await new Promise((resolve) => {
+    const ch = new MessageChannel();
+    // The shell serializes guest requests and retries stalled ones (6 x 20 s);
+    // a page load queues ~6 assets behind each other, so a 30 s deadline used
+    // to 504 the tail of every slow load (blank app). Wait for the engine.
+    const timer = setTimeout(() => resolve(null), 150000);
+    ch.port1.onmessage = (ev) => { clearTimeout(timer); resolve(ev.data); };
+    const msg = { type: 'guest-proxy', port, method: request.method, path: pathq, mode: request.mode, headers, body, prefix };
+    shell.postMessage(msg, body ? [ch.port2, body] : [ch.port2]);
+  });
+
+  if (!reply) return textResponse(504, 'guest proxy: request timed out (is the guest server running?)');
+  if (reply.error) return textResponse(502, 'guest proxy: ' + reply.error);
+
+  const h = new Headers();
+  for (const [k, v] of (reply.headers || [])) { try { h.set(k, v); } catch (_) {} }
+  h.set('cross-origin-embedder-policy', 'require-corp');
+  h.set('cross-origin-resource-policy', 'same-origin');
+  h.set('cache-control', 'no-store');
+  let status = reply.status || 502;
+  if (status < 200 || status > 599) status = 502;
+  const respBody = (status === 204 || status === 304 || request.method === 'HEAD') ? null : reply.body;
+  return new Response(respBody, { status, headers: h });
+}
+
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;         // external → browser default
+
+  // Direct hit under the /guest/<port>/ prefix.
+  const m = url.pathname.match(GUEST_RE);
+  if (m) {
+    e.respondWith(proxyCached(e.request, +m[3], (m[4] || '/') + url.search, m[1], m[2]));
+    return;
+  }
+
+  // Site-absolute request coming FROM a guest-framed document (its referrer
+  // carries the prefix). Subresources are proxied in place; navigations are
+  // 307'd back under the prefix (307 keeps method + body for form POSTs).
+  const ref = e.request.referrer || '';
+  if (ref.startsWith(self.location.origin + '/') && ref.includes('/guest/')) {
+    const rm = new URL(ref).pathname.match(GUEST_RE);
+    if (rm) {
+      const base = rm[1];                                  // e.g. /guest/<id>/8080
+      if (e.request.mode === 'navigate') {
+        e.respondWith(new Response(null, {
+          status: 307,
+          headers: { location: base + url.pathname + url.search },
+        }));
+      } else {
+        e.respondWith(proxyCached(e.request, +rm[3], url.pathname + url.search, base, rm[2]));
+      }
+    }
+  }
+  // Everything else: no respondWith → untouched.
+});
