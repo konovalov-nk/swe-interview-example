@@ -1120,3 +1120,15 @@
 .session-info strong { font-weight: 500; font-size: 12px; }
 .session-info span { color: var(--muted); font-size: 11px; }
 .session-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.analytics-modal .modal-body { padding: 14px; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+.stats-grid div { display: flex; flex-direction: column; gap: 3px; padding: 9px 10px; background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 6px; }
+.stats-grid span { color: var(--muted); font-size: 11px; }
+.stats-grid strong { font-size: 14px; font-weight: 500; }
+.analytics-modal h3 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; }
+.stats-list { border: 1px solid var(--border-soft); border-radius: 6px; overflow: hidden; }
+.stats-list div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+.stats-list div:last-child { border-bottom: 0; }
+.stats-list span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.muted { color: var(--muted); font-size: 12px; }

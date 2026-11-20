@@ -103,6 +103,9 @@ overlay.
 
 ## Deploy
 
+The public site is `https://swe-interview.br11k.dev`. The older
+`swe-interview-example.br11k.dev` name stays as an alias.
+
 The included `Dockerfile` builds the static site with nginx and the
 COOP/COEP headers the WASM kernel requires. `docker-compose.yml` joins the
 existing `proxy` network and advertises the Caddy label.
@@ -129,6 +132,14 @@ label and gets the certificate. The public edge also needs a route (DNS for
 
 `--apply-edge` updates HAProxy on Hetzner with a timestamped backup and
 restarts only `haproxy-edge`. The verify step waits for Caddy ACME.
+
+Run the session E2E test after a deploy:
+
+```sh
+CHROME_PATH=/path/to/chrome-headless-shell \
+  BASE_URL=https://swe-interview.br11k.dev \
+  node scripts/e2e-session.mjs
+```
 
 ## Cloudflare proxy / cache
 
